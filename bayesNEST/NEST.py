@@ -179,6 +179,7 @@ def recom_omega_ER(E_field, elecFrac, width_param_7=0.046452, width_param_8=0.20
     omega = norm * A * jnp.exp(-0.5 * (elecFrac - cntr)**2 / (wide * wide)) * (1. + erf(skew * (elecFrac - cntr) / (wide * sqrt2)))
     return omega, width_param_10
 
+# @partial(jax.checkpoint, static_argnums=(1))
 @partial(jax.jit, static_argnums=(1))
 def ER_skew(E, E_field, alpha0=1.39, cc0=4.0, cc1=22.1, E0=7.7, E1=54., E2=26.7, E3=6.4, F0=225., F1=71.):
     """

@@ -1,20 +1,16 @@
 from functools import partial
 import numpy as np
 import scipy.stats as spystats
-import corner
-import arviz as az
 
 # JAX imports
 import jax
 from jax import config, jit, lax, random
 import jax.numpy as jnp
 from jax.scipy import stats
-from jax.scipy.special import ndtri, erf, gammaln, ndtr
+from jax.scipy.special import ndtri, erf, gammaln, ndtr, xlogy, xlog1py
 
 # Numpyro and related imports
 import numpyro
-from numpyro.infer.reparam import LocScaleReparam
-from numpyro import infer
 import numpyro.distributions as ndist
 
 # Tensorflow Probability (TFP) imports
@@ -194,7 +190,7 @@ def DiscreteSkewNormalPs(loc, scale, skew, bin_edges=(jnp.linspace(-0,201,202)-0
     ps = jnp.diff(cdf, axis=0)
     # finfo = jnp.finfo(jnp.result_type(ps, float))
     # ps = jnp.clip(ps, a_min=finfo.eps, a_max=1.0 - finfo.eps)
-    return ps/(1-cdf[0,:])
+    return jnp.clip(ps/(1-cdf[0,:]), 0, jnp.inf)
 
 class GaussianMixture2D(ndist.Distribution):
     """
@@ -247,9 +243,10 @@ class GaussianMixture2D(ndist.Distribution):
 
     @ndist.util.validate_sample
     def log_prob(self, value):
+        # value = ndist.util.promote_shapes(value, shape=self.batch_shape+self.mixture_shape+self.event_shape)
         normalize_term = jnp.log(jnp.sqrt(2 * jnp.pi)**2*self.stds[...,0]*self.stds[...,1])
         value_scaled = (value - self.means) / self.stds
-        return jnp.sum(-0.5 * value_scaled**2, axis=-1) - normalize_term
+        return jnp.sum(-0.5 * value_scaled**2 - normalize_term + jnp.log(self.weights), axis=-1)
 
 
     # def cdf(self, value):
@@ -269,3 +266,8 @@ class GaussianMixture2D(ndist.Distribution):
     # @property
     # def variance(self):
     #     return jnp.broadcast_to(self.scale**2*(1 - 2*self._delta**2/jnp.pi), self.batch_shape)
+
+@jit
+def binom_log_pmf(n, p, k):
+    logp = gammaln(n + 1) - gammaln(k + 1) - gammaln(n-k + 1) + xlogy(k, p) + xlog1py(n-k, -p)
+    return jnp.where(k > n, -jnp.inf, logp)
